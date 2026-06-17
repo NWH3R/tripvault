@@ -24,7 +24,14 @@ function formatDate(dateStr: string) {
   });
 }
 
+function toDatetimeLocal(isoStr: string) {
+  const d = new Date(isoStr);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function TripPageClient({ trip }: TripPageClientProps) {
+  const [unlockAt, setUnlockAt] = useState(trip.unlock_at);
   const [isUnlocked, setIsUnlocked] = useState(
     () => new Date() >= new Date(trip.unlock_at)
   );
@@ -32,6 +39,9 @@ export default function TripPageClient({ trip }: TripPageClientProps) {
   const [copied, setCopied] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [justUnlocked, setJustUnlocked] = useState(false);
+  const [editingReveal, setEditingReveal] = useState(false);
+  const [newRevealValue, setNewRevealValue] = useState("");
+  const [savingReveal, setSavingReveal] = useState(false);
 
   const fetchCount = useCallback(async () => {
     const { count, error } = await supabase
@@ -61,13 +71,43 @@ export default function TripPageClient({ trip }: TripPageClientProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const openEditReveal = () => {
+    setNewRevealValue(toDatetimeLocal(unlockAt));
+    setEditingReveal(true);
+  };
+
+  const saveRevealTime = async () => {
+    if (!newRevealValue) return;
+    setSavingReveal(true);
+
+    const newIso = new Date(newRevealValue).toISOString();
+
+    const { error } = await supabase
+      .from("trips")
+      .update({ unlock_at: newIso })
+      .eq("id", trip.id);
+
+    if (error) {
+      console.error("[saveRevealTime] Error:", error);
+      setSavingReveal(false);
+      return;
+    }
+
+    setUnlockAt(newIso);
+    setEditingReveal(false);
+    setSavingReveal(false);
+
+    if (new Date() >= new Date(newIso)) {
+      handleUnlock();
+    }
+  };
+
   /* ── Unlocked view ── */
   if (isUnlocked) {
     return (
       <main className="min-h-screen bg-[#0a0a0a] relative z-10">
         {showConfetti && <ConfettiEffect />}
 
-        {/* Flash overlay on fresh unlock */}
         <AnimatePresence>
           {justUnlocked && (
             <motion.div
@@ -116,7 +156,7 @@ export default function TripPageClient({ trip }: TripPageClientProps) {
             transition={{ delay: 0.4 }}
             className="text-sm text-white/30 mt-1"
           >
-            Unlocked {formatDate(trip.unlock_at)}
+            Unlocked {formatDate(unlockAt)}
           </motion.p>
         </motion.div>
 
@@ -180,7 +220,7 @@ export default function TripPageClient({ trip }: TripPageClientProps) {
             transition={{ delay: 0.3 }}
             className="text-sm text-white/35 mb-10"
           >
-            Photos are hidden until {formatDate(trip.unlock_at)}
+            Photos are hidden until {formatDate(unlockAt)}
           </motion.p>
 
           <motion.div
@@ -188,7 +228,70 @@ export default function TripPageClient({ trip }: TripPageClientProps) {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.4 }}
           >
-            <CountdownTimer unlockAt={trip.unlock_at} onUnlock={handleUnlock} />
+            <CountdownTimer
+              key={unlockAt}
+              unlockAt={unlockAt}
+              onUnlock={handleUnlock}
+            />
+          </motion.div>
+
+          {/* Change reveal time */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.55 }}
+            className="mt-6"
+          >
+            <AnimatePresence mode="wait">
+              {editingReveal ? (
+                <motion.div
+                  key="edit"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.18 }}
+                  className="bg-white/5 border border-white/10 rounded-2xl p-4 text-left space-y-3"
+                >
+                  <p className="text-sm font-semibold text-white/50">
+                    Change reveal time
+                  </p>
+                  <input
+                    type="datetime-local"
+                    value={newRevealValue}
+                    onChange={(e) => setNewRevealValue(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white focus:border-indigo-500 focus:outline-none transition-colors [color-scheme:dark]"
+                  />
+                  <div className="flex gap-2">
+                    <motion.button
+                      onClick={saveRevealTime}
+                      disabled={savingReveal || !newRevealValue}
+                      whileHover={!savingReveal ? { scale: 1.03 } : {}}
+                      whileTap={!savingReveal ? { scale: 0.97 } : {}}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 rounded-xl text-sm transition-colors"
+                    >
+                      {savingReveal ? "Saving…" : "Save"}
+                    </motion.button>
+                    <button
+                      onClick={() => setEditingReveal(false)}
+                      className="px-4 py-2.5 rounded-xl border border-white/10 text-white/40 hover:text-white/70 text-sm transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.button
+                  key="trigger"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={openEditReveal}
+                  className="text-xs text-white/25 hover:text-white/50 transition-colors underline underline-offset-2"
+                >
+                  Change reveal time
+                </motion.button>
+              )}
+            </AnimatePresence>
           </motion.div>
         </div>
       </motion.div>
