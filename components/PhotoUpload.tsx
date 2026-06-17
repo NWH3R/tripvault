@@ -51,7 +51,21 @@ export default function PhotoUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setMyPhotos(loadMyPhotos(tripId));
+    const stored = loadMyPhotos(tripId);
+    if (stored.length === 0) {
+      setMyPhotos([]);
+      return;
+    }
+    supabase
+      .from("photos")
+      .select("id")
+      .in("id", stored.map((p) => p.id))
+      .then(({ data }) => {
+        const alive = new Set((data ?? []).map((p: { id: string }) => p.id));
+        const valid = stored.filter((p) => alive.has(p.id));
+        if (valid.length !== stored.length) saveMyPhotos(tripId, valid);
+        setMyPhotos(valid);
+      });
   }, [tripId]);
 
   const addFiles = useCallback((incoming: File[]) => {
