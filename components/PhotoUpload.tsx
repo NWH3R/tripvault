@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 
@@ -17,6 +17,26 @@ interface UploadFile {
   error?: string;
 }
 
+interface MyPhoto {
+  id: string;
+  storagePath: string;
+  publicUrl: string;
+}
+
+const localKey = (tripId: string) => `tripvault_uploads_${tripId}`;
+
+function loadMyPhotos(tripId: string): MyPhoto[] {
+  try {
+    return JSON.parse(localStorage.getItem(localKey(tripId)) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveMyPhotos(tripId: string, photos: MyPhoto[]) {
+  localStorage.setItem(localKey(tripId), JSON.stringify(photos));
+}
+
 export default function PhotoUpload({
   tripId,
   onUploadComplete,
@@ -26,7 +46,13 @@ export default function PhotoUpload({
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [myPhotos, setMyPhotos] = useState<MyPhoto[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMyPhotos(loadMyPhotos(tripId));
+  }, [tripId]);
 
   const addFiles = useCallback((incoming: File[]) => {
     const images = incoming.filter((f) => f.type.startsWith("image/"));
@@ -91,16 +117,31 @@ export default function PhotoUpload({
           throw storageErr;
         }
 
-        const { error: dbErr } = await supabase.from("photos").insert({
-          trip_id: tripId,
-          storage_path: path,
-          uploaded_by_name: uploaderName.trim() || null,
-        });
+        const { data: inserted, error: dbErr } = await supabase
+          .from("photos")
+          .insert({
+            trip_id: tripId,
+            storage_path: path,
+            uploaded_by_name: uploaderName.trim() || null,
+          })
+          .select("id")
+          .single();
 
         if (dbErr) {
           console.error("[PhotoUpload] DB insert error:", dbErr);
           throw dbErr;
         }
+
+        const publicUrl = supabase.storage
+          .from("trip-photos")
+          .getPublicUrl(path).data.publicUrl;
+
+        const newPhoto: MyPhoto = { id: inserted.id, storagePath: path, publicUrl };
+        setMyPhotos((prev) => {
+          const updated = [...prev, newPhoto];
+          saveMyPhotos(tripId, updated);
+          return updated;
+        });
 
         setFiles((prev) =>
           prev.map((f, idx) =>
@@ -124,6 +165,37 @@ export default function PhotoUpload({
       setFiles([]);
       setShowSuccess(false);
     }, 3000);
+  };
+
+  const deletePhoto = async (photo: MyPhoto) => {
+    setDeletingId(photo.id);
+
+    const { error: storageErr } = await supabase.storage
+      .from("trip-photos")
+      .remove([photo.storagePath]);
+
+    if (storageErr) {
+      console.error("[PhotoUpload] Storage delete error:", storageErr);
+    }
+
+    const { error: dbErr } = await supabase
+      .from("photos")
+      .delete()
+      .eq("id", photo.id);
+
+    if (dbErr) {
+      console.error("[PhotoUpload] DB delete error:", dbErr);
+      setDeletingId(null);
+      return;
+    }
+
+    setMyPhotos((prev) => {
+      const updated = prev.filter((p) => p.id !== photo.id);
+      saveMyPhotos(tripId, updated);
+      return updated;
+    });
+    setDeletingId(null);
+    onUploadComplete();
   };
 
   const pendingCount = files.filter((f) => f.status === "pending").length;
@@ -265,6 +337,45 @@ export default function PhotoUpload({
             ? `Uploading ${doneCount + 1}/${files.length}…`
             : `Upload ${pendingCount} Photo${pendingCount !== 1 ? "s" : ""} 🚀`}
         </motion.button>
+      )}
+
+      {/* Your uploads */}
+      {myPhotos.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-2">
+            Your uploads
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            {myPhotos.map((photo) => (
+              <div
+                key={photo.id}
+                className="relative group aspect-square rounded-xl overflow-hidden bg-white/5 border border-white/10"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.publicUrl}
+                  alt="Your upload"
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  onClick={() => deletePhoto(photo)}
+                  disabled={deletingId === photo.id}
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white/70 hover:text-white hover:bg-red-600/80 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-150 disabled:opacity-50"
+                  aria-label="Delete photo"
+                >
+                  {deletingId === photo.id ? (
+                    <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    "✕"
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

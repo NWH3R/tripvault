@@ -43,7 +43,7 @@ create policy "public_all" on photos for all using (true) with check (true);
 -- insert into storage.buckets (id, name, public) values ('trip-photos', 'trip-photos', true)
 --   on conflict (id) do nothing;
 
--- Storage policy: allow anyone to upload and read
+-- Storage policy: allow anyone to upload, read, and delete
 -- (Supabase dashboard: Storage > trip-photos > Policies > Add policy)
 -- Policy for INSERT (upload):
 --   Target roles: anon
@@ -51,6 +51,14 @@ create policy "public_all" on photos for all using (true) with check (true);
 -- Policy for SELECT (read):
 --   Target roles: anon
 --   USING: true
+-- Policy for DELETE:
+--   Target roles: anon
+--   USING: bucket_id = 'trip-photos'
+--
+-- Or run in the SQL editor:
+-- create policy "anon_delete" on storage.objects
+--   for delete to anon
+--   using (bucket_id = 'trip-photos');
 
 
 -- ─── Migration: add auth to trips ────────────────────────────────────────────
