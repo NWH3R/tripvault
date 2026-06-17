@@ -61,6 +61,12 @@ create policy "public_all" on photos for all using (true) with check (true);
 --   using (bucket_id = 'trip-photos');
 
 
+-- ─── Realtime ────────────────────────────────────────────────────────────────
+-- Run in the SQL editor to enable live sync across devices:
+alter publication supabase_realtime add table photos;
+alter publication supabase_realtime add table trips;
+
+
 -- ─── Migration: add auth to trips ────────────────────────────────────────────
 
 -- Add created_by column (nullable so existing trips are unaffected)

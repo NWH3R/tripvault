@@ -58,6 +58,39 @@ export default function TripPageClient({ trip }: TripPageClientProps) {
     if (!isUnlocked) fetchCount();
   }, [isUnlocked, fetchCount]);
 
+  // Real-time sync: keep count and reveal time in sync across all devices
+  useEffect(() => {
+    const channel = supabase
+      .channel(`trip-${trip.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "photos",
+          filter: `trip_id=eq.${trip.id}`,
+        },
+        () => fetchCount()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trips",
+          filter: `id=eq.${trip.id}`,
+        },
+        (payload) => {
+          const newUnlockAt = (payload.new as { unlock_at: string }).unlock_at;
+          setUnlockAt(newUnlockAt);
+          if (new Date() >= new Date(newUnlockAt)) handleUnlock();
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [trip.id, fetchCount, handleUnlock]);
+
   const handleUnlock = useCallback(() => {
     setIsUnlocked(true);
     setShowConfetti(true);
