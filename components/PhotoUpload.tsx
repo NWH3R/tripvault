@@ -360,7 +360,7 @@ export default function PhotoUpload({
                 <button
                   onClick={() => deletePhoto(photo)}
                   disabled={deletingId === photo.id}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white/70 hover:text-white hover:bg-red-600/80 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-150 disabled:opacity-50"
+                  className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white/70 hover:text-white hover:bg-red-600/80 text-xs flex items-center justify-center transition-all duration-150 disabled:opacity-50"
                   aria-label="Delete photo"
                 >
                   {deletingId === photo.id ? (
