@@ -34,11 +34,14 @@ export default function TripPageClient({ trip }: TripPageClientProps) {
   const [justUnlocked, setJustUnlocked] = useState(false);
 
   const fetchCount = useCallback(async () => {
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("photos")
       .select("*", { count: "exact", head: true })
       .eq("trip_id", trip.id);
-    setPhotoCount(count ?? 0);
+    if (error) console.error("[fetchCount] Error:", error);
+    const actual = count ?? 0;
+    console.log(`[fetchCount] trip=${trip.id} db_count=${actual}`);
+    setPhotoCount(actual);
   }, [trip.id]);
 
   useEffect(() => {

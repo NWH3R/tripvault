@@ -170,32 +170,33 @@ export default function PhotoUpload({
   const deletePhoto = async (photo: MyPhoto) => {
     setDeletingId(photo.id);
 
-    const { error: storageErr } = await supabase.storage
-      .from("trip-photos")
-      .remove([photo.storagePath]);
+    try {
+      const { error: storageErr } = await supabase.storage
+        .from("trip-photos")
+        .remove([photo.storagePath]);
 
-    if (storageErr) {
-      console.error("[PhotoUpload] Storage delete error:", storageErr);
-    }
+      if (storageErr) {
+        console.error("[PhotoUpload] Storage delete error:", storageErr);
+      }
 
-    const { error: dbErr } = await supabase
-      .from("photos")
-      .delete()
-      .eq("id", photo.id);
+      const { error: dbErr } = await supabase
+        .from("photos")
+        .delete()
+        .eq("id", photo.id);
 
-    if (dbErr) {
-      console.error("[PhotoUpload] DB delete error:", dbErr);
+      if (dbErr) {
+        console.error("[PhotoUpload] DB delete error:", dbErr);
+      } else {
+        setMyPhotos((prev) => {
+          const updated = prev.filter((p) => p.id !== photo.id);
+          saveMyPhotos(tripId, updated);
+          return updated;
+        });
+      }
+    } finally {
       setDeletingId(null);
-      return;
+      onUploadComplete();
     }
-
-    setMyPhotos((prev) => {
-      const updated = prev.filter((p) => p.id !== photo.id);
-      saveMyPhotos(tripId, updated);
-      return updated;
-    });
-    setDeletingId(null);
-    onUploadComplete();
   };
 
   const pendingCount = files.filter((f) => f.status === "pending").length;
