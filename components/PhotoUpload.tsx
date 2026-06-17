@@ -65,16 +65,31 @@ export default function PhotoUpload({
       );
 
       try {
-        const ext = files[i].file.name.split(".").pop() ?? "jpg";
+        const file = files[i].file;
+        const ext = file.name.split(".").pop() ?? "jpg";
         const path = `${tripId}/${Date.now()}-${Math.random()
           .toString(36)
           .slice(2)}.${ext}`;
 
+        console.log("[PhotoUpload] Uploading:", {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          bucket: "trip-photos",
+          path,
+        });
+
         const { error: storageErr } = await supabase.storage
           .from("trip-photos")
-          .upload(path, files[i].file, { cacheControl: "3600" });
+          .upload(path, file, {
+            cacheControl: "3600",
+            contentType: file.type || "image/jpeg",
+          });
 
-        if (storageErr) throw storageErr;
+        if (storageErr) {
+          console.error("[PhotoUpload] Storage error:", storageErr);
+          throw storageErr;
+        }
 
         const { error: dbErr } = await supabase.from("photos").insert({
           trip_id: tripId,
@@ -82,14 +97,18 @@ export default function PhotoUpload({
           uploaded_by_name: uploaderName.trim() || null,
         });
 
-        if (dbErr) throw dbErr;
+        if (dbErr) {
+          console.error("[PhotoUpload] DB insert error:", dbErr);
+          throw dbErr;
+        }
 
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i ? { ...f, status: "done" } : f
           )
         );
-      } catch {
+      } catch (err) {
+        console.error("[PhotoUpload] Upload failed for file:", files[i].file.name, err);
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i ? { ...f, status: "error", error: "Upload failed" } : f
